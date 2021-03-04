@@ -23,6 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/vmware/antrea-operator-for-kubernetes/api/v1"
+	"github.com/vmware/antrea-operator-for-kubernetes/controllers/sharedinfo"
 	operatortypes "github.com/vmware/antrea-operator-for-kubernetes/controllers/types"
 )
 
@@ -50,8 +51,9 @@ type Adaptor interface {
 type StatusManager struct {
 	sync.Mutex
 
-	client  client.Client
-	mapper  meta.RESTMapper
+	client client.Client
+	mapper meta.RESTMapper
+	// TODO check use of name, may lead to bug
 	name    string
 	version string
 
@@ -60,6 +62,7 @@ type StatusManager struct {
 	daemonSets  []types.NamespacedName
 	deployments []types.NamespacedName
 
+	// TODO OperatorNamespace may not be used.
 	OperatorNamespace string
 	AdaptorName       string
 	Adaptor
@@ -74,6 +77,24 @@ type StatusK8s struct {
 
 type StatusOc struct {
 	Status
+}
+
+func New(client client.Client, mapper meta.RESTMapper, name, operatorNamespace, version string, sharedInfo *sharedinfo.SharedInfo) *StatusManager {
+	status := StatusManager{
+		client:            client,
+		mapper:            mapper,
+		name:              name,
+		version:           version,
+		OperatorNamespace: operatorNamespace,
+		AdaptorName:       sharedInfo.AdaptorName,
+	}
+	//TODO openshift or openshift4, be consistent with "antreaPlatform"
+	if sharedInfo.AdaptorName == "openshift4" {
+		status.Adaptor = &StatusOc{}
+	} else {
+		status.Adaptor = &StatusK8s{}
+	}
+	return &status
 }
 
 func (status *StatusManager) setConditions(progressing []string, reachedAvailableLevel bool) {
