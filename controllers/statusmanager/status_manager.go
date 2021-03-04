@@ -41,8 +41,8 @@ const (
 
 // TODO check the interfaces commented in Adaptor
 type Adaptor interface {
-	// getLastPodState(status *StatusManager) (map[types.NamespacedName]daemonsetState, map[types.NamespacedName]deploymentState)
-	// setLastPodState(status *StatusManager, dss map[types.NamespacedName]daemonsetState, deps map[types.NamespacedName]deploymentState) error
+	getLastPodState(status *StatusManager) (map[types.NamespacedName]daemonsetState, map[types.NamespacedName]deploymentState)
+	setLastPodState(status *StatusManager, dss map[types.NamespacedName]daemonsetState, deps map[types.NamespacedName]deploymentState) error
 	set(status *StatusManager, reachedAvailableLevel bool, conditions ...configv1.ClusterOperatorStatusCondition)
 }
 
@@ -76,7 +76,6 @@ type StatusOc struct {
 	Status
 }
 
-// TODO check if this interface necessary
 func (status *StatusManager) setConditions(progressing []string, reachedAvailableLevel bool) {
 	conditions := make([]configv1.ClusterOperatorStatusCondition, 0, 2)
 	if len(progressing) > 0 {
@@ -285,6 +284,61 @@ func (status *StatusManager) CombineConditions(conditions *[]configv1.ClusterOpe
 	return changed, messages
 }
 
-func (status *StatusManager) SetFromPods() {
+// syncDegraded syncs the current Degraded status
+func (status *StatusManager) syncDegraded() {
+	for _, c := range status.failing {
+		if c != nil {
+			status.set(status, false, *c)
+			return
+		}
+	}
+	status.set(
+		status,
+		false,
+		configv1.ClusterOperatorStatusCondition{
+			Type:   configv1.OperatorDegraded,
+			Status: configv1.ConditionFalse,
+		},
+	)
+}
 
+func (status *StatusManager) setDegraded(statusLevel StatusLevel, reason, message string) {
+	status.failing[statusLevel] = &configv1.ClusterOperatorStatusCondition{
+		Type:    configv1.OperatorDegraded,
+		Status:  configv1.ConditionTrue,
+		Reason:  reason,
+		Message: message,
+	}
+	status.syncDegraded()
+}
+
+func (status *StatusManager) setNotDegraded(statusLevel StatusLevel) {
+	if status.failing[statusLevel] != nil {
+		status.failing[statusLevel] = nil
+	}
+	status.syncDegraded()
+}
+
+func (status *StatusManager) SetDegraded(statusLevel StatusLevel, reason, message string) {
+	status.Lock()
+	defer status.Unlock()
+	status.setDegraded(statusLevel, reason, message)
+}
+
+func (status *StatusManager) SetNotDegraded(statusLevel StatusLevel) {
+	status.Lock()
+	defer status.Unlock()
+	status.setNotDegraded(statusLevel)
+}
+
+func (status *StatusManager) SetDaemonSets(daemonSets []types.NamespacedName) {
+	status.Lock()
+	defer status.Unlock()
+	status.daemonSets = daemonSets
+}
+
+func (status *StatusManager) SetDeployments(deployments []types.NamespacedName) {
+	status.Lock()
+	defer status.Unlock()
+	status.deployments = deployments
 }
