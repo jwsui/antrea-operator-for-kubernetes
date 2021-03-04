@@ -25,10 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/vmware/antrea-operator-for-kubernetes/controllers/sharedinfo"
+	"github.com/vmware/antrea-operator-for-kubernetes/controllers/statusmanager"
 	operatortypes "github.com/vmware/antrea-operator-for-kubernetes/controllers/types"
 
 	"github.com/go-logr/logr"
-	"github.com/openshift/cluster-network-operator/pkg/controller/statusmanager"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
