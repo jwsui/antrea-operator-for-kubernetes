@@ -50,11 +50,11 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile updates the ClusterOperator.Status to match the current state of the watched Deployments/DaemonSets
 func (r *PodReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := r.Log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling pod update")
 
 	if !r.isAntreaResource(&request) {
 		return reconcile.Result{}, nil
 	}
+	reqLogger.Info("Reconciling pod update")
 	r.Status.SetFromPods()
 
 	if err := r.recreateResourceIfNotExist(&request); err != nil {

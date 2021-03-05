@@ -157,7 +157,7 @@ func (status *StatusManager) SetFromPods() {
 	if err := status.setLastPodState(status, daemonsetStates, deploymentStates); err != nil {
 		log.Error(err, "Failed to set pod state (continuing)")
 	}
-
+	log.Info("fxxk", "available", reachedAvailableLevel)
 	status.setConditions(progressing, reachedAvailableLevel)
 
 	if len(hung) > 0 {
