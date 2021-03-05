@@ -65,17 +65,7 @@ func (r *PodReconciler) Reconcile(request reconcile.Request) (reconcile.Result, 
 }
 
 func (r *PodReconciler) isAntreaResource(request *reconcile.Request) bool {
-	if r.SharedInfo.AntreaAgentDaemonSetSpec != nil {
-		if request.Name == r.SharedInfo.AntreaAgentDaemonSetSpec.GetName() && request.Namespace == r.SharedInfo.AntreaAgentDaemonSetSpec.GetNamespace() {
-			return true
-		}
-	}
-	if r.SharedInfo.AntreaControllerDeploymentSpec != nil {
-		if request.Name == r.SharedInfo.AntreaControllerDeploymentSpec.GetName() && request.Namespace == r.SharedInfo.AntreaControllerDeploymentSpec.GetNamespace() {
-			return true
-		}
-	}
-	return false
+	return request.Namespace == "antrea-operator" && request.Name == "antrea-operator"
 }
 
 func (r *PodReconciler) recreateResourceIfNotExist(request *reconcile.Request) error {
