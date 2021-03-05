@@ -250,6 +250,12 @@ func (status *StatusManager) setAntreaInstallStatus(conditions *[]configv1.Clust
 		return err
 	}
 	antreaInstallPatch := client.MergeFrom(antreaInstall.DeepCopy())
+	v1helpers.SetStatusCondition(conditions,
+		configv1.ClusterOperatorStatusCondition{
+			Type:   configv1.OperatorUpgradeable,
+			Status: configv1.ConditionTrue,
+		},
+	)
 	antreaInstall.Status.Conditions = *conditions
 	if err := status.client.Status().Patch(context.TODO(), antreaInstall, antreaInstallPatch); err != nil {
 		log.Error(err, "failed to set AntreaInstall")
