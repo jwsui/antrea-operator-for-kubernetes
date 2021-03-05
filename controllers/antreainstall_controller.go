@@ -18,9 +18,7 @@ import (
 	uns "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/vmware/antrea-operator-for-kubernetes/controllers/sharedinfo"
 	"github.com/vmware/antrea-operator-for-kubernetes/controllers/statusmanager"
@@ -54,7 +52,7 @@ type AntreaInstallReconciler struct {
 func (r *AntreaInstallReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1.AntreaInstall{}).
-		Watches(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{}).
+		// Watches(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 
