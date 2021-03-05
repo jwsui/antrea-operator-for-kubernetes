@@ -57,9 +57,9 @@ func (r *PodReconciler) Reconcile(request reconcile.Request) (reconcile.Result, 
 	reqLogger.Info("Reconciling pod update")
 	r.Status.SetFromPods()
 
-	if err := r.recreateResourceIfNotExist(&request); err != nil {
-		return reconcile.Result{Requeue: true}, err
-	}
+	// if err := r.recreateResourceIfNotExist(&request); err != nil {
+	// 	return reconcile.Result{Requeue: true}, err
+	// }
 
 	return reconcile.Result{RequeueAfter: ResyncPeriod}, nil
 }
