@@ -124,7 +124,7 @@ spec:
     #   ca.crt: <CA certificate>
     #   tls.crt: <TLS certificate>
     #   tls.key: <TLS private key>
-    # And the Secret must be mounted to directory "/var/run/antrea/antrea-controller-tls" of the
+    # And the Secret ust be mounted to directory "/var/run/antrea/antrea-controller-tls" of the
     # antrea-controller container.
     #selfSignedCert: true
   antreaImage: antrea/antrea-ubi:v0.9.1
