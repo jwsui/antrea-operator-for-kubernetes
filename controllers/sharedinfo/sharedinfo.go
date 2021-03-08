@@ -39,7 +39,5 @@ func New(mgr manager.Manager) (*SharedInfo, error) {
 		log.Error(err, "Failed to get ncp-install")
 		return nil, err
 	}
-	// TODO just set to kubernetes before antrea platform pr is completed.
-	return &SharedInfo{AdaptorName: "kubernetes"}, nil
-	// return &SharedInfo{AdaptorName: antreaInstall.Spec.AntreaPlatform}, nil
+	return &SharedInfo{AdaptorName: antreaInstall.Spec.AntreaPlatform}, nil
 }
