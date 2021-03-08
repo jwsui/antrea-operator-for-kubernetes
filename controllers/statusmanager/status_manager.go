@@ -67,16 +67,9 @@ type StatusManager struct {
 	Adaptor
 }
 
-// TODO Why Status needed?
-type Status struct{}
+type StatusK8s struct{}
 
-type StatusK8s struct {
-	Status
-}
-
-type StatusOc struct {
-	Status
-}
+type StatusOc struct{}
 
 func New(client client.Client, mapper meta.RESTMapper, name, operatorNamespace, version string, sharedInfo *sharedinfo.SharedInfo) *StatusManager {
 	status := StatusManager{
