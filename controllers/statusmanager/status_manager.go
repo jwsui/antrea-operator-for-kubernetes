@@ -89,7 +89,7 @@ func New(client client.Client, mapper meta.RESTMapper, name, operatorNamespace, 
 		AdaptorName:       sharedInfo.AdaptorName,
 	}
 	//TODO openshift or openshift4, be consistent with "antreaPlatform"
-	if sharedInfo.AdaptorName == "openshift4" {
+	if sharedInfo.AdaptorName == "openshift" {
 		status.Adaptor = &StatusOc{}
 	} else {
 		status.Adaptor = &StatusK8s{}
