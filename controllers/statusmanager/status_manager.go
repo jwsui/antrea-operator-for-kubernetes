@@ -40,7 +40,6 @@ const (
 	maxStatusLevel
 )
 
-// TODO check the interfaces commented in Adaptor
 type Adaptor interface {
 	getLastPodState(status *StatusManager) (map[types.NamespacedName]daemonsetState, map[types.NamespacedName]deploymentState)
 	setLastPodState(status *StatusManager, dss map[types.NamespacedName]daemonsetState, deps map[types.NamespacedName]deploymentState) error
@@ -263,32 +262,6 @@ func (status *StatusManager) setAntreaInstallStatus(conditions *[]configv1.Clust
 	}
 	return err
 }
-
-/** TODO should be removed.
-func SetAntreaInstallDegraded(cl client.Client, reason, message string) {
-	SetAntreaInstallStatus(cl, configv1.OperatorDegraded, configv1.ConditionTrue, time.Now(), reason, message)
-}
-
-func SetAntreaInstallNotDegraded(cl client.Client) {
-	SetAntreaInstallStatus(cl, configv1.OperatorDegraded, configv1.ConditionFalse, time.Now(), "", "")
-}
-
-// TODO deprecated!
-func SetDegraded(cl client.Client, status *statusmanager.StatusManager, statusLevel statusmanager.StatusLevel, reason, message string) {
-	// Set clusteroperator/antrea status
-	status.SetDegraded(statusLevel, reason, message)
-	// Set AntreaInstall CR status
-	SetAntreaInstallDegraded(cl, reason, message)
-}
-
-// TODO deprecated!
-func SetNotDegraded(cl client.Client, status *statusmanager.StatusManager, statusLevel statusmanager.StatusLevel) {
-	// Set clusteroperator/antrea status
-	status.SetNotDegraded(statusLevel)
-	// Set AntreaInstall CR status
-	SetAntreaInstallNotDegraded(cl)
-}
-*/
 
 func (status *StatusManager) CombineConditions(conditions *[]configv1.ClusterOperatorStatusCondition,
 	newConditions *[]configv1.ClusterOperatorStatusCondition) (bool, string) {
