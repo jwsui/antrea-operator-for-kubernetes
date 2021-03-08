@@ -52,7 +52,7 @@ type StatusManager struct {
 
 	client client.Client
 	mapper meta.RESTMapper
-	// TODO check use of name, may lead to bug
+
 	name    string
 	version string
 
@@ -61,7 +61,6 @@ type StatusManager struct {
 	daemonSets  []types.NamespacedName
 	deployments []types.NamespacedName
 
-	// TODO OperatorNamespace may not be used.
 	OperatorNamespace string
 	AdaptorName       string
 	Adaptor
@@ -80,7 +79,6 @@ func New(client client.Client, mapper meta.RESTMapper, name, operatorNamespace, 
 		OperatorNamespace: operatorNamespace,
 		AdaptorName:       sharedInfo.AdaptorName,
 	}
-	//TODO openshift or openshift4, be consistent with "antreaPlatform"
 	if sharedInfo.AdaptorName == "openshift" {
 		status.Adaptor = &StatusOc{}
 	} else {
