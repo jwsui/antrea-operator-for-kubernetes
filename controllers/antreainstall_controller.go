@@ -9,9 +9,7 @@ import (
 	"reflect"
 
 	configv1 "github.com/openshift/api/config/v1"
-	ocoperv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-network-operator/pkg/apply"
-	"github.com/openshift/cluster-network-operator/pkg/render"
 	k8sutil "github.com/openshift/cluster-network-operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,9 +18,7 @@ import (
 	uns "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/vmware/antrea-operator-for-kubernetes/controllers/sharedinfo"
 	"github.com/vmware/antrea-operator-for-kubernetes/controllers/statusmanager"
@@ -56,7 +52,7 @@ type AntreaInstallReconciler struct {
 func (r *AntreaInstallReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1.AntreaInstall{}).
-		Watches(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{}).
+		// Watches(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 
@@ -90,43 +86,43 @@ func (r *AntreaInstallReconciler) Reconcile(request ctrl.Request) (ctrl.Result, 
 	}
 
 	// Fetch Cluster Network CR.
-	clusterConfig := &configv1.Network{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: operatortypes.ClusterConfigName}, clusterConfig)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			msg := "Cluster Network CR not found"
-			log.Info(msg)
-			r.Status.SetDegraded(statusmanager.ClusterConfig, "NoClusterConfig", msg)
-			return reconcile.Result{}, nil
-		}
-		r.Status.SetDegraded(statusmanager.ClusterConfig, "InvalidClusterConfig",
-			fmt.Sprintf("Failed to get cluster network CRD: %v", err))
-		log.Error(err, "failed to get Cluster Network CR")
-		return reconcile.Result{Requeue: true}, err
-	}
-	if request.Name == clusterConfig.Name && r.AppliedClusterConfig != nil {
-		if reflect.DeepEqual(clusterConfig.Spec, r.AppliedClusterConfig.Spec) {
-			log.Info("no configuration change")
-			return reconcile.Result{}, nil
-		}
-	}
+	// clusterConfig := &configv1.Network{}
+	// err := r.Client.Get(context.TODO(), types.NamespacedName{Name: operatortypes.ClusterConfigName}, clusterConfig)
+	// if err != nil {
+	// 	if apierrors.IsNotFound(err) {
+	// 		msg := "Cluster Network CR not found"
+	// 		log.Info(msg)
+	// 		r.Status.SetDegraded(statusmanager.ClusterConfig, "NoClusterConfig", msg)
+	// 		return reconcile.Result{}, nil
+	// 	}
+	// 	r.Status.SetDegraded(statusmanager.ClusterConfig, "InvalidClusterConfig",
+	// 		fmt.Sprintf("Failed to get cluster network CRD: %v", err))
+	// 	log.Error(err, "failed to get Cluster Network CR")
+	// 	return reconcile.Result{Requeue: true}, err
+	// }
+	// if request.Name == clusterConfig.Name && r.AppliedClusterConfig != nil {
+	// 	if reflect.DeepEqual(clusterConfig.Spec, r.AppliedClusterConfig.Spec) {
+	// 		log.Info("no configuration change")
+	// 		return reconcile.Result{}, nil
+	// 	}
+	// }
 
 	// Fetch the Network.operator.openshift.io instance
-	operatorNetwork := &ocoperv1.Network{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: operatortypes.ClusterOperatorNetworkName}, operatorNetwork)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			r.Status.SetDegraded(statusmanager.OperatorConfig, "NoClusterNetworkOperatorConfig", fmt.Sprintf("Cluster network operator configuration not found"))
-			return reconcile.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		log.Error(err, "Unable to retrieve Network.operator.openshift.io object")
-		return reconcile.Result{Requeue: true}, err
-	}
+	// operatorNetwork := &ocoperv1.Network{}
+	// err = r.Client.Get(context.TODO(), types.NamespacedName{Name: operatortypes.ClusterOperatorNetworkName}, operatorNetwork)
+	// if err != nil {
+	// 	if apierrors.IsNotFound(err) {
+	// 		r.Status.SetDegraded(statusmanager.OperatorConfig, "NoClusterNetworkOperatorConfig", fmt.Sprintf("Cluster network operator configuration not found"))
+	// 		return reconcile.Result{}, nil
+	// 	}
+	// 	// Error reading the object - requeue the request.
+	// 	log.Error(err, "Unable to retrieve Network.operator.openshift.io object")
+	// 	return reconcile.Result{Requeue: true}, err
+	// }
 
 	// Fetch antrea-install CR.
 	operConfig := &operatorv1.AntreaInstall{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Namespace: operatortypes.OperatorNameSpace, Name: operatortypes.OperatorConfigName}, operConfig)
+	err := r.Client.Get(context.TODO(), types.NamespacedName{Namespace: operatortypes.OperatorNameSpace, Name: operatortypes.OperatorConfigName}, operConfig)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			msg := fmt.Sprintf("%s CR not found", operatortypes.OperatorConfigName)
@@ -146,26 +142,26 @@ func (r *AntreaInstallReconciler) Reconcile(request ctrl.Request) (ctrl.Result, 
 	}
 
 	// Fill default configurations.
-	if err = configutil.FillConfigs(clusterConfig, operConfig); err != nil {
-		log.Error(err, "failed to fill configurations")
-		r.Status.SetDegraded(statusmanager.OperatorConfig, "FillConfigurationsError", fmt.Sprintf("Failed to fill configurations: %v", err))
-		return reconcile.Result{Requeue: true}, err
-	}
+	// if err = configutil.FillConfigs(clusterConfig, operConfig); err != nil {
+	// 	log.Error(err, "failed to fill configurations")
+	// 	r.Status.SetDegraded(statusmanager.OperatorConfig, "FillConfigurationsError", fmt.Sprintf("Failed to fill configurations: %v", err))
+	// 	return reconcile.Result{Requeue: true}, err
+	// }
 
 	// Validate configurations.
-	if err = configutil.ValidateConfig(clusterConfig, operConfig); err != nil {
-		log.Error(err, "failed to validate configurations")
-		r.Status.SetDegraded(statusmanager.OperatorConfig, "InvalidOperatorConfig", fmt.Sprintf("The operator configuration is invalid: %v", err))
-		return reconcile.Result{Requeue: true}, err
-	}
+	// if err = configutil.ValidateConfig(clusterConfig, operConfig); err != nil {
+	// 	log.Error(err, "failed to validate configurations")
+	// 	r.Status.SetDegraded(statusmanager.OperatorConfig, "InvalidOperatorConfig", fmt.Sprintf("The operator configuration is invalid: %v", err))
+	// 	return reconcile.Result{Requeue: true}, err
+	// }
 
 	// Generate render data.
-	renderData, err := configutil.GenerateRenderData(operatorNetwork, operConfig)
-	if err != nil {
-		log.Error(err, "failed to generate render data")
-		r.Status.SetDegraded(statusmanager.OperatorConfig, "RenderConfigError", fmt.Sprintf("Failed to render operator configurations: %v", err))
-		return reconcile.Result{Requeue: true}, err
-	}
+	// renderData, err := configutil.GenerateRenderData(operatorNetwork, operConfig)
+	// if err != nil {
+	// 	log.Error(err, "failed to generate render data")
+	// 	r.Status.SetDegraded(statusmanager.OperatorConfig, "RenderConfigError", fmt.Sprintf("Failed to render operator configurations: %v", err))
+	// 	return reconcile.Result{Requeue: true}, err
+	// }
 
 	// Compare configurations change.
 	appliedConfig, err := r.getAppliedOperConfig()
@@ -179,28 +175,28 @@ func (r *AntreaInstallReconciler) Reconcile(request ctrl.Request) (ctrl.Result, 
 		log.Info("no configuration change")
 	} else {
 		// Render configurations.
-		objs, err := render.RenderDir(operatortypes.DefaultManifestDir, renderData)
-		if err != nil {
-			log.Error(err, "failed to render configuration")
-			r.Status.SetDegraded(statusmanager.OperatorConfig, "RenderConfigError", fmt.Sprintf("Failed to render operator configurations: %v", err))
-			return reconcile.Result{Requeue: true}, err
-		}
+		// objs, err := render.RenderDir(operatortypes.DefaultManifestDir, renderData)
+		// if err != nil {
+		// 	log.Error(err, "failed to render configuration")
+		// 	r.Status.SetDegraded(statusmanager.OperatorConfig, "RenderConfigError", fmt.Sprintf("Failed to render operator configurations: %v", err))
+		// 	return reconcile.Result{Requeue: true}, err
+		// }
 
-		// Update status and sharedInfo.
-		r.SharedInfo.Lock()
-		defer r.SharedInfo.Unlock()
-		if err = r.updateStatusManagerAndSharedInfo(objs, clusterConfig); err != nil {
-			return reconcile.Result{Requeue: true}, err
-		}
+		// // Update status and sharedInfo.
+		// r.SharedInfo.Lock()
+		// defer r.SharedInfo.Unlock()
+		// if err = r.updateStatusManagerAndSharedInfo(objs, clusterConfig); err != nil {
+		// 	return reconcile.Result{Requeue: true}, err
+		// }
 
 		// Apply configurations.
-		for _, obj := range objs {
-			if err = apply.ApplyObject(context.TODO(), r.Client, obj); err != nil {
-				log.Error(err, "failed to apply resource")
-				r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", fmt.Sprintf("Failed to apply operator configurations: %v", err))
-				return reconcile.Result{Requeue: true}, err
-			}
-		}
+		// for _, obj := range objs {
+		// 	if err = apply.ApplyObject(context.TODO(), r.Client, obj); err != nil {
+		// 		log.Error(err, "failed to apply resource")
+		// 		r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", fmt.Sprintf("Failed to apply operator configurations: %v", err))
+		// 		return reconcile.Result{Requeue: true}, err
+		// 	}
+		// }
 
 		// Delete old antrea-agent and antrea-controller pods.
 		if r.AppliedOperConfig != nil && agentNeedChange && !imageChange {
@@ -218,23 +214,23 @@ func (r *AntreaInstallReconciler) Reconcile(request ctrl.Request) (ctrl.Result, 
 	}
 
 	// Update cluster network CR status.
-	clusterNetworkConfigChanged := configutil.HasClusterNetworkConfigChange(r.AppliedClusterConfig, clusterConfig)
-	defaultMTUChanged, curDefaultMTU, err := configutil.HasDefaultMTUChange(r.AppliedOperConfig, operConfig)
+	// clusterNetworkConfigChanged := configutil.HasClusterNetworkConfigChange(r.AppliedClusterConfig, clusterConfig)
+	// defaultMTUChanged, curDefaultMTU, err := configutil.HasDefaultMTUChange(r.AppliedOperConfig, operConfig)
 	if err != nil {
 		r.Status.SetDegraded(statusmanager.OperatorConfig, "UpdateNetworkStatusError", fmt.Sprintf("failed to check default MTU configuration: %v", err))
 		return reconcile.Result{Requeue: true}, err
 	}
-	if clusterNetworkConfigChanged || defaultMTUChanged {
-		if err = updateNetworkStatus(r.Client, clusterConfig, curDefaultMTU); err != nil {
-			r.Status.SetDegraded(statusmanager.ClusterConfig, "UpdateNetworkStatusError", fmt.Sprintf("Failed to update network status: %v", err))
-			return reconcile.Result{Requeue: true}, err
-		}
-	}
+	// if clusterNetworkConfigChanged || defaultMTUChanged {
+	// 	if err = updateNetworkStatus(r.Client, clusterConfig, curDefaultMTU); err != nil {
+	// 		r.Status.SetDegraded(statusmanager.ClusterConfig, "UpdateNetworkStatusError", fmt.Sprintf("Failed to update network status: %v", err))
+	// 		return reconcile.Result{Requeue: true}, err
+	// 	}
+	// }
 
 	r.Status.SetNotDegraded(statusmanager.ClusterConfig)
 	r.Status.SetNotDegraded(statusmanager.OperatorConfig)
 
-	r.AppliedClusterConfig = clusterConfig
+	// r.AppliedClusterConfig = clusterConfig
 	r.AppliedOperConfig = operConfig
 
 	return ctrl.Result{}, nil
