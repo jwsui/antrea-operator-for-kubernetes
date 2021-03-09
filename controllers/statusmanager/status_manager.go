@@ -124,7 +124,7 @@ func (adaptor *StatusK8s) set(status *StatusManager, reachedAvailableLevel bool,
 		antreaInstall := &operatorv1.AntreaInstall{}
 		err := status.client.Get(context.TODO(), types.NamespacedName{Namespace: operatortypes.OperatorNameSpace, Name: operatortypes.OperatorConfigName}, antreaInstall)
 		if err != nil {
-			log.Error(err, "Failed to get ncpInstall")
+			log.Error(err, "Failed to get antreaInstall")
 			return err
 		}
 		co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: status.name}}
@@ -151,16 +151,23 @@ func (adaptor *StatusK8s) set(status *StatusManager, reachedAvailableLevel bool,
 			)
 		}
 
+		v1helpers.SetStatusCondition(&co.Status.Conditions,
+			configv1.ClusterOperatorStatusCondition{
+				Type:   configv1.OperatorUpgradeable,
+				Status: configv1.ConditionTrue,
+			},
+		)
+
 		if reflect.DeepEqual(*oldStatus, co.Status) {
 			return nil
 		}
 
-		// Set status to ncp-install CRD
+		// Set status to antrea-install CRD
 		err = status.setAntreaInstallStatus(&co.Status.Conditions)
 		return err
 	})
 	if err != nil {
-		log.Error(err, "Failed to set NcpInstall")
+		log.Error(err, "Failed to set AntreaInstall")
 	}
 }
 
@@ -222,7 +229,7 @@ func (adaptor *StatusOc) set(status *StatusManager, reachedAvailableLevel bool, 
 			return err
 		}
 		log.Info(fmt.Sprintf("Updated ClusterOperator with conditions:\n%s", string(buf)))
-		// Set status to ncp-install CRD
+		// Set status to antrea-install CRD
 		err = status.setAntreaInstallStatus(&co.Status.Conditions)
 		return err
 	})
