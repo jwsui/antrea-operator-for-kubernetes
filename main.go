@@ -68,14 +68,7 @@ func main() {
 		os.Exit(1)
 	}
 	statusManager := statusmanager.New(mgr.GetClient(), mgr.GetRESTMapper(), types.AntreaClusterOperatorName, types.OperatorNameSpace, version.Version, sharedInfo)
-	if err = (&controllers.AntreaInstallReconciler{
-		Client:     mgr.GetClient(),
-		Log:        ctrl.Log.WithName("controllers").WithName("AntreaInstall"),
-		Scheme:     mgr.GetScheme(),
-		Status:     statusManager,
-		Mapper:     mgr.GetRESTMapper(),
-		SharedInfo: sharedInfo,
-	}).SetupWithManager(mgr); err != nil {
+	if err = (controllers.New(mgr, statusManager, sharedInfo).SetupWithManager(mgr)); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AntreaInstall")
 		os.Exit(1)
 	}
