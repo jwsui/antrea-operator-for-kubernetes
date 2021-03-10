@@ -424,10 +424,7 @@ func New(mgr manager.Manager, statusManager *statusmanager.StatusManager, info *
 
 // TODO delete this function or use this to delegate?
 func (r *AntreaInstallReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.AntreaInstall{}).
-		Watches(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{}).
-		Complete(r)
+	return r.Adaptor.SetupWithManager(r, mgr)
 }
 
 // +kubebuilder:rbac:groups=operator.antrea.vmware.com,resources=antreainstalls,verbs=get;list;watch;create;update;patch;delete
