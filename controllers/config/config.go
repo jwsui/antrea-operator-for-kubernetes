@@ -11,16 +11,27 @@ import (
 	"github.com/openshift/cluster-network-operator/pkg/network"
 	"github.com/openshift/cluster-network-operator/pkg/render"
 	"gopkg.in/yaml.v2"
+	uns "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	operatorv1 "github.com/vmware/antrea-operator-for-kubernetes/api/v1"
-	"github.com/vmware/antrea-operator-for-kubernetes/controllers/types"
+	"github.com/vmware/antrea-operator-for-kubernetes/controllers"
+	"github.com/vmware/antrea-operator-for-kubernetes/controllers/statusmanager"
+	operatortypes "github.com/vmware/antrea-operator-for-kubernetes/controllers/types"
 	"github.com/vmware/antrea-operator-for-kubernetes/version"
 )
 
 var log = ctrl.Log.WithName("config")
 
-func FillConfigs(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaInstall) error {
+// TODO re-consider the implementation of functions in this package.
+
+type ConfigOc struct{}
+
+type ConfigK8s struct{}
+
+func (c *ConfigOc) FillConfigs(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaInstall) error {
 	antreaAgentConfig := make(map[string]interface{})
 	err := yaml.Unmarshal([]byte(operConfig.Spec.AntreaAgentConfig), &antreaAgentConfig)
 	if err != nil {
@@ -31,7 +42,7 @@ func FillConfigs(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaI
 	if len(clusterConfig.Spec.ServiceNetwork) == 0 {
 		return fmt.Errorf("service network can not be empty")
 	}
-	serviceCIDR, ok := antreaAgentConfig[types.ServiceCIDROption]
+	serviceCIDR, ok := antreaAgentConfig[operatortypes.ServiceCIDROption]
 	if ok {
 		found := false
 		for _, serviceNet := range clusterConfig.Spec.ServiceNetwork {
@@ -42,21 +53,21 @@ func FillConfigs(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaI
 		}
 		if !found {
 			log.Info("WARNING: option: %s is overwritten by cluster config")
-			antreaAgentConfig[types.ServiceCIDROption] = clusterConfig.Spec.ServiceNetwork[0]
+			antreaAgentConfig[operatortypes.ServiceCIDROption] = clusterConfig.Spec.ServiceNetwork[0]
 		}
 	} else {
-		antreaAgentConfig[types.ServiceCIDROption] = clusterConfig.Spec.ServiceNetwork[0]
+		antreaAgentConfig[operatortypes.ServiceCIDROption] = clusterConfig.Spec.ServiceNetwork[0]
 	}
 
 	// Set default MTU.
-	_, ok = antreaAgentConfig[types.DefaultMTUOption]
+	_, ok = antreaAgentConfig[operatortypes.DefaultMTUOption]
 	if !ok {
-		antreaAgentConfig[types.DefaultMTUOption] = types.DefaultMTU
+		antreaAgentConfig[operatortypes.DefaultMTUOption] = operatortypes.DefaultMTU
 	}
 
 	// Set Antrea image.
 	if operConfig.Spec.AntreaImage == "" {
-		operConfig.Spec.AntreaImage = types.DefaultAntreaImage
+		operConfig.Spec.AntreaImage = operatortypes.DefaultAntreaImage
 	}
 
 	updatedAntreaAgentConfig, err := yaml.Marshal(antreaAgentConfig)
@@ -67,7 +78,57 @@ func FillConfigs(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaI
 	return nil
 }
 
-func ValidateConfig(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaInstall) error {
+func (c *ConfigK8s) FillConfigs(operConfig *operatorv1.AntreaInstall) error {
+	antreaAgentConfig := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(operConfig.Spec.AntreaAgentConfig), &antreaAgentConfig)
+	if err != nil {
+		return fmt.Errorf("failed to parse AntreaAgentConfig: %v", err)
+	}
+
+	// TODO get service cidr from k8s. api found?
+	// TODO the lack of service cidr will lead to the defeat in validateconfig.
+
+	// // Set service CIDR.
+	// if len(clusterConfig.Spec.ServiceNetwork) == 0 {
+	// 	return fmt.Errorf("service network can not be empty")
+	// }
+	// serviceCIDR, ok := antreaAgentConfig[operatortypes.ServiceCIDROption]
+	// if ok {
+	// 	found := false
+	// 	for _, serviceNet := range clusterConfig.Spec.ServiceNetwork {
+	// 		if serviceNet == serviceCIDR {
+	// 			found = true
+	// 			break
+	// 		}
+	// 	}
+	// 	if !found {
+	// 		log.Info("WARNING: option: %s is overwritten by cluster config")
+	// 		antreaAgentConfig[operatortypes.ServiceCIDROption] = clusterConfig.Spec.ServiceNetwork[0]
+	// 	}
+	// } else {
+	// 	antreaAgentConfig[operatortypes.ServiceCIDROption] = clusterConfig.Spec.ServiceNetwork[0]
+	// }
+
+	// Set default MTU.
+	_, ok := antreaAgentConfig[operatortypes.DefaultMTUOption]
+	if !ok {
+		antreaAgentConfig[operatortypes.DefaultMTUOption] = operatortypes.DefaultMTU
+	}
+
+	// Set Antrea image.
+	if operConfig.Spec.AntreaImage == "" {
+		operConfig.Spec.AntreaImage = operatortypes.DefaultAntreaImage
+	}
+
+	updatedAntreaAgentConfig, err := yaml.Marshal(antreaAgentConfig)
+	if err != nil {
+		return fmt.Errorf("failed to fill configurations in AntreaAgentConfig: %v", err)
+	}
+	operConfig.Spec.AntreaAgentConfig = string(updatedAntreaAgentConfig)
+	return nil
+}
+
+func (c *ConfigOc) ValidateConfig(clusterConfig *configv1.Network, operConfig *operatorv1.AntreaInstall) error {
 	var errs []error
 
 	// Validate antrea config
@@ -76,7 +137,7 @@ func ValidateConfig(clusterConfig *configv1.Network, operConfig *operatorv1.Antr
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to parse AntreaAgentConfig: %v", err))
 	} else {
-		serviceCIDR, ok := antreaAgentConfig[types.ServiceCIDROption].(string)
+		serviceCIDR, ok := antreaAgentConfig[operatortypes.ServiceCIDROption].(string)
 		if ok {
 			found := false
 			for _, serviceNet := range clusterConfig.Spec.ServiceNetwork {
@@ -88,6 +149,44 @@ func ValidateConfig(clusterConfig *configv1.Network, operConfig *operatorv1.Antr
 			if !found {
 				errs = append(errs, fmt.Errorf("invalid serviceCIDR option: %s, available values are: %s", serviceCIDR, clusterConfig.Spec.ServiceNetwork))
 			}
+		} else {
+			errs = append(errs, fmt.Errorf("serviceCIDR option can not be empty"))
+		}
+	}
+	if operConfig.Spec.AntreaImage == "" {
+		errs = append(errs, fmt.Errorf("antreaImage option can not be empty"))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("invalidate configuration: %v", errs)
+	}
+	return nil
+}
+
+func (c *ConfigK8s) ValidateConfig(operConfig *operatorv1.AntreaInstall) error {
+	var errs []error
+
+	// Validate antrea config
+	antreaAgentConfig := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(operConfig.Spec.AntreaAgentConfig), &antreaAgentConfig)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to parse AntreaAgentConfig: %v", err))
+	} else {
+		serviceCIDR, ok := antreaAgentConfig[operatortypes.ServiceCIDROption].(string)
+		if ok {
+
+			// TODO check the service cidr if necessary
+			_ = serviceCIDR
+
+			// found := false
+			// for _, serviceNet := range clusterConfig.Spec.ServiceNetwork {
+			// 	if serviceNet == serviceCIDR {
+			// 		found = true
+			// 		break
+			// 	}
+			// }
+			// if !found {
+			// 	errs = append(errs, fmt.Errorf("invalid serviceCIDR option: %s, available values are: %s", serviceCIDR, clusterConfig.Spec.ServiceNetwork))
+			// }
 		} else {
 			errs = append(errs, fmt.Errorf("serviceCIDR option can not be empty"))
 		}
@@ -150,11 +249,11 @@ func HasDefaultMTUChange(preConfig, curConfig *operatorv1.AntreaInstall) (bool, 
 	curAntreaAgentConfig := make(map[string]interface{})
 	err := yaml.Unmarshal([]byte(curConfig.Spec.AntreaAgentConfig), &curAntreaAgentConfig)
 	if err != nil {
-		return false, types.DefaultMTU, err
+		return false, operatortypes.DefaultMTU, err
 	}
-	curDefaultMTU, ok := curAntreaAgentConfig[types.DefaultMTUOption]
+	curDefaultMTU, ok := curAntreaAgentConfig[operatortypes.DefaultMTUOption]
 	if !ok {
-		return false, types.DefaultMTU, fmt.Errorf("%s option can not be empty", types.DefaultMTUOption)
+		return false, operatortypes.DefaultMTU, fmt.Errorf("%s option can not be empty", operatortypes.DefaultMTUOption)
 	}
 
 	if preConfig == nil {
@@ -164,11 +263,11 @@ func HasDefaultMTUChange(preConfig, curConfig *operatorv1.AntreaInstall) (bool, 
 	preAntreaAgentConfig := make(map[string]interface{})
 	err = yaml.Unmarshal([]byte(preConfig.Spec.AntreaAgentConfig), &preAntreaAgentConfig)
 	if err != nil {
-		return false, types.DefaultMTU, err
+		return false, operatortypes.DefaultMTU, err
 	}
-	preDefaultMTU, ok := preAntreaAgentConfig[types.DefaultMTUOption]
+	preDefaultMTU, ok := preAntreaAgentConfig[operatortypes.DefaultMTUOption]
 	if !ok {
-		return false, types.DefaultMTU, fmt.Errorf("%s option can not be empty", types.DefaultMTUOption)
+		return false, operatortypes.DefaultMTU, fmt.Errorf("%s option can not be empty", operatortypes.DefaultMTUOption)
 	}
 
 	return preDefaultMTU != curDefaultMTU, curDefaultMTU.(int), nil
@@ -224,16 +323,114 @@ func pluginCNIConfDir(conf *ocoperv1.NetworkSpec) string {
 	return network.SystemCNIConfDir
 }
 
-func GenerateRenderData(operatorNetwork *ocoperv1.Network, operConfig *operatorv1.AntreaInstall) (*render.RenderData, error) {
+func (c *ConfigK8s) GenerateRenderData(operConfig *operatorv1.AntreaInstall) (*render.RenderData, error) {
 	renderData := render.MakeRenderData()
 
-	renderData.Data[types.ReleaseVersion] = version.Version
-	renderData.Data[types.AntreaAgentConfigRenderKey] = operConfig.Spec.AntreaAgentConfig
-	renderData.Data[types.AntreaCNIConfigRenderKey] = operConfig.Spec.AntreaCNIConfig
-	renderData.Data[types.AntreaControllerConfigRenderKey] = operConfig.Spec.AntreaControllerConfig
-	renderData.Data[types.AntreaImageRenderKey] = operConfig.Spec.AntreaImage
-	renderData.Data[types.CNIConfDirRenderKey] = pluginCNIConfDir(&operatorNetwork.Spec)
-	renderData.Data[types.CNIBinDirRenderKey] = network.CNIBinDir
+	renderData.Data[operatortypes.ReleaseVersion] = version.Version
+	renderData.Data[operatortypes.AntreaAgentConfigRenderKey] = operConfig.Spec.AntreaAgentConfig
+	renderData.Data[operatortypes.AntreaCNIConfigRenderKey] = operConfig.Spec.AntreaCNIConfig
+	renderData.Data[operatortypes.AntreaControllerConfigRenderKey] = operConfig.Spec.AntreaControllerConfig
+	renderData.Data[operatortypes.AntreaImageRenderKey] = operConfig.Spec.AntreaImage
+	// TODO how to get cni conf dir in k8s?
+	// renderData.Data[operatortypes.CNIConfDirRenderKey] = pluginCNIConfDir(&operatorNetwork.Spec)
+	renderData.Data[operatortypes.CNIBinDirRenderKey] = network.CNIBinDir
 
 	return &renderData, nil
+}
+
+func (c *ConfigOc) GenerateRenderData(operatorNetwork *ocoperv1.Network, operConfig *operatorv1.AntreaInstall) (*render.RenderData, error) {
+	renderData := render.MakeRenderData()
+
+	renderData.Data[operatortypes.ReleaseVersion] = version.Version
+	renderData.Data[operatortypes.AntreaAgentConfigRenderKey] = operConfig.Spec.AntreaAgentConfig
+	renderData.Data[operatortypes.AntreaCNIConfigRenderKey] = operConfig.Spec.AntreaCNIConfig
+	renderData.Data[operatortypes.AntreaControllerConfigRenderKey] = operConfig.Spec.AntreaControllerConfig
+	renderData.Data[operatortypes.AntreaImageRenderKey] = operConfig.Spec.AntreaImage
+	renderData.Data[operatortypes.CNIConfDirRenderKey] = pluginCNIConfDir(&operatorNetwork.Spec)
+	renderData.Data[operatortypes.CNIBinDirRenderKey] = network.CNIBinDir
+
+	return &renderData, nil
+}
+
+func (c *ConfigK8s) UpdateStatusManagerAndSharedInfo(r *controllers.AntreaInstallReconciler, objs []*uns.Unstructured) error {
+	var daemonSets, deployments []types.NamespacedName
+	var daemonSetObject, deploymentObject *uns.Unstructured
+	for _, obj := range objs {
+		if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "DaemonSet" {
+			daemonSets = append(daemonSets, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+			daemonSetObject = obj
+		} else if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "Deployment" {
+			deployments = append(deployments, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+			deploymentObject = obj
+		}
+	}
+	if daemonSetObject == nil || deploymentObject == nil {
+		var missedResources []string
+		if daemonSetObject == nil {
+			missedResources = append(missedResources, fmt.Sprintf("DaemonSet: %s", operatortypes.AntreaAgentDaemonSetName))
+		}
+		if deploymentObject == nil {
+			missedResources = append(missedResources, fmt.Sprintf("Deployment: %s", operatortypes.AntreaControllerDeploymentName))
+		}
+		err := fmt.Errorf("configuration of resources %v is missing", missedResources)
+		log.Error(nil, err.Error())
+		r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", err.Error())
+		return err
+	}
+	r.Status.SetDaemonSets(daemonSets)
+	r.Status.SetDeployments(deployments)
+	r.SharedInfo.AntreaAgentDaemonSetSpec = daemonSetObject.DeepCopy()
+	r.SharedInfo.AntreaControllerDeploymentSpec = deploymentObject.DeepCopy()
+	return nil
+}
+
+func (c *ConfigOc) UpdateStatusManagerAndSharedInfo(r *controllers.AntreaInstallReconciler, objs []*uns.Unstructured, clusterConfig *configv1.Network) error {
+	var daemonSets, deployments []types.NamespacedName
+	// TODO how to deal with related objects?
+	// var relatedObjects []configv1.ObjectReference
+	var daemonSetObject, deploymentObject *uns.Unstructured
+	for _, obj := range objs {
+		if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "DaemonSet" {
+			daemonSets = append(daemonSets, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+			daemonSetObject = obj
+		} else if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "Deployment" {
+			deployments = append(deployments, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+			deploymentObject = obj
+		}
+		// restMapping, err := r.Mapper.RESTMapping(obj.GroupVersionKind().GroupKind())
+		// if err != nil {
+		// 	log.Error(err, "failed to get REST mapping for storing related object")
+		// 	continue
+		// }
+		// relatedObjects = append(relatedObjects, configv1.ObjectReference{
+		// 	Group:     obj.GetObjectKind().GroupVersionKind().Group,
+		// 	Resource:  restMapping.Resource.Resource,
+		// 	Name:      obj.GetName(),
+		// 	Namespace: obj.GetNamespace(),
+		// })
+		if err := controllerutil.SetControllerReference(clusterConfig, obj, r.Scheme); err != nil {
+			log.Error(err, "failed to set owner reference", "resource", obj.GetName())
+			r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", fmt.Sprintf("Failed to set owner reference: %v", err))
+			return err
+		}
+	}
+	if daemonSetObject == nil || deploymentObject == nil {
+		var missedResources []string
+		if daemonSetObject == nil {
+			missedResources = append(missedResources, fmt.Sprintf("DaemonSet: %s", operatortypes.AntreaAgentDaemonSetName))
+		}
+		if deploymentObject == nil {
+			missedResources = append(missedResources, fmt.Sprintf("Deployment: %s", operatortypes.AntreaControllerDeploymentName))
+		}
+		err := fmt.Errorf("configuration of resources %v is missing", missedResources)
+		log.Error(nil, err.Error())
+		r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", err.Error())
+		return err
+	}
+	r.Status.SetDaemonSets(daemonSets)
+	r.Status.SetDeployments(deployments)
+	// r.Status.SetRelatedObjects(relatedObjects)
+	r.SharedInfo.AntreaAgentDaemonSetSpec = daemonSetObject.DeepCopy()
+	r.SharedInfo.AntreaControllerDeploymentSpec = deploymentObject.DeepCopy()
+	return nil
 }
