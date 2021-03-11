@@ -11,14 +11,9 @@ import (
 	"github.com/openshift/cluster-network-operator/pkg/network"
 	"github.com/openshift/cluster-network-operator/pkg/render"
 	"gopkg.in/yaml.v2"
-	uns "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	operatorv1 "github.com/vmware/antrea-operator-for-kubernetes/api/v1"
-	"github.com/vmware/antrea-operator-for-kubernetes/controllers"
-	"github.com/vmware/antrea-operator-for-kubernetes/controllers/statusmanager"
 	operatortypes "github.com/vmware/antrea-operator-for-kubernetes/controllers/types"
 	"github.com/vmware/antrea-operator-for-kubernetes/version"
 )
@@ -350,87 +345,4 @@ func (c *ConfigOc) GenerateRenderData(operatorNetwork *ocoperv1.Network, operCon
 	renderData.Data[operatortypes.CNIBinDirRenderKey] = network.CNIBinDir
 
 	return &renderData, nil
-}
-
-func (c *ConfigK8s) UpdateStatusManagerAndSharedInfo(r *controllers.AntreaInstallReconciler, objs []*uns.Unstructured) error {
-	var daemonSets, deployments []types.NamespacedName
-	var daemonSetObject, deploymentObject *uns.Unstructured
-	for _, obj := range objs {
-		if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "DaemonSet" {
-			daemonSets = append(daemonSets, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
-			daemonSetObject = obj
-		} else if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "Deployment" {
-			deployments = append(deployments, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
-			deploymentObject = obj
-		}
-	}
-	if daemonSetObject == nil || deploymentObject == nil {
-		var missedResources []string
-		if daemonSetObject == nil {
-			missedResources = append(missedResources, fmt.Sprintf("DaemonSet: %s", operatortypes.AntreaAgentDaemonSetName))
-		}
-		if deploymentObject == nil {
-			missedResources = append(missedResources, fmt.Sprintf("Deployment: %s", operatortypes.AntreaControllerDeploymentName))
-		}
-		err := fmt.Errorf("configuration of resources %v is missing", missedResources)
-		log.Error(nil, err.Error())
-		r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", err.Error())
-		return err
-	}
-	r.Status.SetDaemonSets(daemonSets)
-	r.Status.SetDeployments(deployments)
-	r.SharedInfo.AntreaAgentDaemonSetSpec = daemonSetObject.DeepCopy()
-	r.SharedInfo.AntreaControllerDeploymentSpec = deploymentObject.DeepCopy()
-	return nil
-}
-
-func (c *ConfigOc) UpdateStatusManagerAndSharedInfo(r *controllers.AntreaInstallReconciler, objs []*uns.Unstructured, clusterConfig *configv1.Network) error {
-	var daemonSets, deployments []types.NamespacedName
-	// TODO how to deal with related objects?
-	// var relatedObjects []configv1.ObjectReference
-	var daemonSetObject, deploymentObject *uns.Unstructured
-	for _, obj := range objs {
-		if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "DaemonSet" {
-			daemonSets = append(daemonSets, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
-			daemonSetObject = obj
-		} else if obj.GetAPIVersion() == "apps/v1" && obj.GetKind() == "Deployment" {
-			deployments = append(deployments, types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
-			deploymentObject = obj
-		}
-		// restMapping, err := r.Mapper.RESTMapping(obj.GroupVersionKind().GroupKind())
-		// if err != nil {
-		// 	log.Error(err, "failed to get REST mapping for storing related object")
-		// 	continue
-		// }
-		// relatedObjects = append(relatedObjects, configv1.ObjectReference{
-		// 	Group:     obj.GetObjectKind().GroupVersionKind().Group,
-		// 	Resource:  restMapping.Resource.Resource,
-		// 	Name:      obj.GetName(),
-		// 	Namespace: obj.GetNamespace(),
-		// })
-		if err := controllerutil.SetControllerReference(clusterConfig, obj, r.Scheme); err != nil {
-			log.Error(err, "failed to set owner reference", "resource", obj.GetName())
-			r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", fmt.Sprintf("Failed to set owner reference: %v", err))
-			return err
-		}
-	}
-	if daemonSetObject == nil || deploymentObject == nil {
-		var missedResources []string
-		if daemonSetObject == nil {
-			missedResources = append(missedResources, fmt.Sprintf("DaemonSet: %s", operatortypes.AntreaAgentDaemonSetName))
-		}
-		if deploymentObject == nil {
-			missedResources = append(missedResources, fmt.Sprintf("Deployment: %s", operatortypes.AntreaControllerDeploymentName))
-		}
-		err := fmt.Errorf("configuration of resources %v is missing", missedResources)
-		log.Error(nil, err.Error())
-		r.Status.SetDegraded(statusmanager.OperatorConfig, "ApplyObjectsError", err.Error())
-		return err
-	}
-	r.Status.SetDaemonSets(daemonSets)
-	r.Status.SetDeployments(deployments)
-	// r.Status.SetRelatedObjects(relatedObjects)
-	r.SharedInfo.AntreaAgentDaemonSetSpec = daemonSetObject.DeepCopy()
-	r.SharedInfo.AntreaControllerDeploymentSpec = deploymentObject.DeepCopy()
-	return nil
 }
